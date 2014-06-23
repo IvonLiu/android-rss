@@ -120,88 +120,103 @@ public class RSSReader implements java.io.Closeable {
    * @throws RSSFault if an unrecoverable IO error has occurred
    */
   public RSSFeed load(String uri, File cacheFile) throws RSSReaderException {
-	  
+	
+	  RSSFeed feed = null;
 		 
-	NetworkInfo activeNetwork = mConnectivityManager.getActiveNetworkInfo();
-	boolean isConnected = activeNetwork != null &&
-	                      activeNetwork.isConnected();
+	  NetworkInfo activeNetwork = mConnectivityManager.getActiveNetworkInfo();
+	  boolean isConnected = activeNetwork != null && activeNetwork.isConnected();
 	
-	if(isConnected) {
-	    final HttpGet httpget = new HttpGet(uri);
+	  if(isConnected) {
+		  
+		  // Connected to network, attempt to get feed from URI
+		  
+		  final HttpGet httpget = new HttpGet(uri);
 	
-	    InputStream feedStream = null;
-	    try {
-	      // Send GET request to URI
-	      Log.i("TAG", "sending get request");
-	      final HttpResponse response = httpclient.execute(httpget);
-	
-	      // Check if server response is valid
-	      Log.i("TAG", "checking if server response is valid");
-	      final StatusLine status = response.getStatusLine();
-	      if (status.getStatusCode() != HttpStatus.SC_OK) {
-	        throw new RSSReaderException(status.getStatusCode(),
-	            status.getReasonPhrase());
-	      }
-	
-	      // Extract content stream from HTTP response
-	      HttpEntity entity = response.getEntity();
-	      feedStream = entity.getContent();
-	
-	      RSSFeed feed;
-	      if(feedStream != null) {
-	          ByteArrayOutputStream baos = new ByteArrayOutputStream();
-	
-	    	  // Fake code simulating the copy
-	    	  // You can generally do better with nio if you need...
-	    	  // And please, unlike me, do something about the Exceptions :D
-	    	  byte[] buffer = new byte[1024];
-	    	  int len;
-	    	  while ((len = feedStream.read(buffer)) > -1 ) {
-	    		  baos.write(buffer, 0, len);
-	    	  }
-	    	  baos.flush();
-	          
-	    	  InputStream is1 = new ByteArrayInputStream(baos.toByteArray()); 
-	    	  InputStream is2 = new ByteArrayInputStream(baos.toByteArray());
-	    	  feed = parser.parse(is1);
-	    	  saveToCache(cacheFile, is2);
-	      } else {
-	    	  InputStream is = new FileInputStream(cacheFile);
-	    	  feed = parser.parse(is);
-	      }
-	      
-	      if(feed != null) {
-		      if (feed.getLink() == null) {
-		        feed.setLink(Uri.parse(uri));
+		  InputStream feedStream = null;
+		  try {
+		      // Send GET request to URI
+		      Log.i("TAG", "sending get request");
+		      final HttpResponse response = httpclient.execute(httpget);
+		
+		      // Check if server response is valid
+		      Log.i("TAG", "checking if server response is valid");
+		      final StatusLine status = response.getStatusLine();
+		      if (status.getStatusCode() != HttpStatus.SC_OK) {
+		    	  throw new RSSReaderException(status.getStatusCode(),
+		    			  status.getReasonPhrase());
 		      }
-	      }
 	
-	      return feed;
-	    } catch (ClientProtocolException e) {
-	      throw new RSSFault(e);
-	    } catch (IOException e) {
-	      throw new RSSFault(e);
-	    } finally {
-	      Resources.closeQuietly(feedStream);
-	    }
-	} else {
-		InputStream is = null;
-		try {
-			if(cacheFile != null)
-				is = new FileInputStream(cacheFile);
-		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		if(is != null)
-  	  		return parser.parse(is);
-	}
-	return null;
+		      // Extract content stream from HTTP response
+		      HttpEntity entity = response.getEntity();
+		      feedStream = entity.getContent();
+	
+		      if(feedStream != null) {
+		    	  
+		    	  // Good input stream, proceed normally
+		    	  
+		          ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		
+		    	  // Fake code simulating the copy
+		    	  // You can generally do better with nio if you need...
+		    	  // And please, unlike me, do something about the Exceptions :D
+		    	  byte[] buffer = new byte[1024];
+		    	  int len;
+		    	  while ((len = feedStream.read(buffer)) > -1 ) {
+		    		  baos.write(buffer, 0, len);
+		    	  }
+		    	  baos.flush();
+		          
+		    	  // Create a copy of input stream for writing to cache
+		    	  InputStream is1 = new ByteArrayInputStream(baos.toByteArray()); 
+		    	  InputStream is2 = new ByteArrayInputStream(baos.toByteArray());
+		    	  feed = parser.parse(is1);
+		    	  saveToCache(cacheFile, is2);
+		      } else {
+		    	  // Bad input stream, attempt to use cached feed
+		    	  feed = getCachedFeed(cacheFile);
+		      }
+		  } catch (ClientProtocolException e) {
+			  throw new RSSFault(e);
+		  } catch (IOException e) {
+			  throw new RSSFault(e);
+		  } finally {
+			  Resources.closeQuietly(feedStream);
+		  }
+	  } else {
+		  // Network connection not usable, attempt to get cached feed
+		  feed = getCachedFeed(cacheFile);
+	  }
+	  
+	  // Set feed link
+      if(feed != null) {
+	      if (feed.getLink() == null) {
+	    	  feed.setLink(Uri.parse(uri));
+	      }
+      }
+	  
+	  return feed;
   }
-
-  /*
-
-  */
+  
+  private RSSFeed getCachedFeed(File cacheFile) {
+	  
+	  if(cacheFile == null)
+		  return null;
+	  
+	  RSSFeed feed = null;
+	  
+	  try {
+		  
+		  InputStream is = new FileInputStream(cacheFile);
+		  
+		  if(is != null)
+			  feed = parser.parse(is);
+		  
+	  } catch (FileNotFoundException e) {
+		  e.printStackTrace();
+	  }
+	  
+	  return feed;
+  }
   
   private void saveToCache(File cacheFile, InputStream feedStream) throws IOException {
 
