@@ -16,6 +16,12 @@
 
 package org.mcsoxford.rss;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -27,6 +33,12 @@ import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
+
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
+import android.util.Log;
 
 /**
  * HTTP client to retrieve and parse RSS 2.0 feeds. Callers must call
@@ -47,15 +59,21 @@ public class RSSReader implements java.io.Closeable {
   private final RSSParserSPI parser;
 
   /**
+   * ConnectivityManager to check for network status
+   */
+  private final ConnectivityManager mConnectivityManager;
+  
+  /**
    * Instantiate a thread-safe HTTP client to retrieve RSS feeds. The injected
    * {@link HttpClient} implementation must be thread-safe.
    * 
    * @param httpclient thread-safe HTTP client implementation
    * @param parser thread-safe RSS parser SPI implementation
    */
-  public RSSReader(HttpClient httpclient, RSSParserSPI parser) {
+  public RSSReader(HttpClient httpclient, RSSParserSPI parser, ConnectivityManager cm) {
     this.httpclient = httpclient;
     this.parser = parser;
+    this.mConnectivityManager = cm;
   }
 
   /**
@@ -66,8 +84,8 @@ public class RSSReader implements java.io.Closeable {
    * @param httpclient thread-safe HTTP client implementation
    * @param config RSS configuration
    */
-  public RSSReader(HttpClient httpclient, RSSConfig config) {
-    this(httpclient, new RSSParser(config));
+  public RSSReader(HttpClient httpclient, RSSConfig config, ConnectivityManager cm) {
+    this(httpclient, new RSSParser(config), cm);
   }
 
   /**
@@ -75,18 +93,22 @@ public class RSSReader implements java.io.Closeable {
    * Internal memory consumption and load performance can be tweaked with
    * {@link RSSConfig}.
    */
-  public RSSReader(RSSConfig config) {
-    this(new DefaultHttpClient(), new RSSParser(config));
+  public RSSReader(RSSConfig config, ConnectivityManager cm) {
+    this(new DefaultHttpClient(), new RSSParser(config), cm);
   }
 
   /**
    * Instantiate a thread-safe HTTP client to retrieve and parse RSS feeds.
    * Default RSS configuration capacity values are used.
    */
-  public RSSReader() {
-    this(new DefaultHttpClient(), new RSSParser(new RSSConfig()));
+  public RSSReader(ConnectivityManager cm) {
+    this(new DefaultHttpClient(), new RSSParser(new RSSConfig()), cm);
   }
 
+  
+  public static final int NETWORK_DISCONNECTED = 0;
+  public static final int NETWORK_CONNECTED = 1;
+  
   /**
    * Send HTTP GET request and parse the XML response to construct an in-memory
    * representation of an RSS 2.0 feed.
@@ -97,41 +119,110 @@ public class RSSReader implements java.io.Closeable {
    *           HTTP error
    * @throws RSSFault if an unrecoverable IO error has occurred
    */
-  public RSSFeed load(String uri) throws RSSReaderException {
-    final HttpGet httpget = new HttpGet(uri);
-
-    InputStream feedStream = null;
-    try {
-      // Send GET request to URI
-      final HttpResponse response = httpclient.execute(httpget);
-
-      // Check if server response is valid
-      final StatusLine status = response.getStatusLine();
-      if (status.getStatusCode() != HttpStatus.SC_OK) {
-        throw new RSSReaderException(status.getStatusCode(),
-            status.getReasonPhrase());
-      }
-
-      // Extract content stream from HTTP response
-      HttpEntity entity = response.getEntity();
-      feedStream = entity.getContent();
-
-      RSSFeed feed = parser.parse(feedStream);
-
-      if (feed.getLink() == null) {
-        feed.setLink(android.net.Uri.parse(uri));
-      }
-
-      return feed;
-    } catch (ClientProtocolException e) {
-      throw new RSSFault(e);
-    } catch (IOException e) {
-      throw new RSSFault(e);
-    } finally {
-      Resources.closeQuietly(feedStream);
-    }
+  public RSSFeed load(String uri, File cacheFile) throws RSSReaderException {
+	  
+		 
+	NetworkInfo activeNetwork = mConnectivityManager.getActiveNetworkInfo();
+	boolean isConnected = activeNetwork != null &&
+	                      activeNetwork.isConnected();
+	
+	if(isConnected) {
+	    final HttpGet httpget = new HttpGet(uri);
+	
+	    InputStream feedStream = null;
+	    try {
+	      // Send GET request to URI
+	      Log.i("TAG", "sending get request");
+	      final HttpResponse response = httpclient.execute(httpget);
+	
+	      // Check if server response is valid
+	      Log.i("TAG", "checking if server response is valid");
+	      final StatusLine status = response.getStatusLine();
+	      if (status.getStatusCode() != HttpStatus.SC_OK) {
+	        throw new RSSReaderException(status.getStatusCode(),
+	            status.getReasonPhrase());
+	      }
+	
+	      // Extract content stream from HTTP response
+	      HttpEntity entity = response.getEntity();
+	      feedStream = entity.getContent();
+	
+	      RSSFeed feed;
+	      if(feedStream != null) {
+	          ByteArrayOutputStream baos = new ByteArrayOutputStream();
+	
+	    	  // Fake code simulating the copy
+	    	  // You can generally do better with nio if you need...
+	    	  // And please, unlike me, do something about the Exceptions :D
+	    	  byte[] buffer = new byte[1024];
+	    	  int len;
+	    	  while ((len = feedStream.read(buffer)) > -1 ) {
+	    		  baos.write(buffer, 0, len);
+	    	  }
+	    	  baos.flush();
+	          
+	    	  InputStream is1 = new ByteArrayInputStream(baos.toByteArray()); 
+	    	  InputStream is2 = new ByteArrayInputStream(baos.toByteArray());
+	    	  feed = parser.parse(is1);
+	    	  saveToCache(cacheFile, is2);
+	      } else {
+	    	  InputStream is = new FileInputStream(cacheFile);
+	    	  feed = parser.parse(is);
+	      }
+	      
+	      if(feed != null) {
+		      if (feed.getLink() == null) {
+		        feed.setLink(Uri.parse(uri));
+		      }
+	      }
+	
+	      return feed;
+	    } catch (ClientProtocolException e) {
+	      throw new RSSFault(e);
+	    } catch (IOException e) {
+	      throw new RSSFault(e);
+	    } finally {
+	      Resources.closeQuietly(feedStream);
+	    }
+	} else {
+		InputStream is = null;
+		try {
+			if(cacheFile != null)
+				is = new FileInputStream(cacheFile);
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		if(is != null)
+  	  		return parser.parse(is);
+	}
+	return null;
   }
 
+  /*
+
+  */
+  
+  private void saveToCache(File cacheFile, InputStream feedStream) throws IOException {
+
+	  if(cacheFile == null || feedStream == null)
+		  return;
+	  
+      // FileOutputStream used to write file
+      FileOutputStream fileOutput = new FileOutputStream(cacheFile);
+	  
+	  // Buffer to read data from InputStream
+	  byte[] buffer = new byte[1024];
+	  int bufferLength = 0;
+	  while ( (bufferLength = feedStream.read(buffer)) > 0 ) 
+	  {
+		  fileOutput.write(buffer, 0, bufferLength);	
+	  }
+	
+	  //close the output stream when done
+	  fileOutput.close();
+  }
+  
   /**
    * Release all HTTP client resources.
    */
