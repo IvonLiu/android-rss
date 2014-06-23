@@ -197,6 +197,12 @@ public class RSSReader implements java.io.Closeable {
 	  return feed;
   }
   
+  /**
+   * Get a RSSFeed from a cached file
+   * 
+   * @param cacheFile file to parse feed from
+   * @return RSSFeed parsed from cacheFile
+   */
   private RSSFeed getCachedFeed(File cacheFile) {
 	  
 	  if(cacheFile == null)
@@ -218,6 +224,13 @@ public class RSSReader implements java.io.Closeable {
 	  return feed;
   }
   
+  /**
+   * Writes an InputStream to a cache File for offline use.
+   * 
+   * @param cacheFile File to write feedStream to
+   * @param feedStream InputStream to write to cache file
+   * @throws IOException if file write fails
+   */
   private void saveToCache(File cacheFile, InputStream feedStream) throws IOException {
 
 	  if(cacheFile == null || feedStream == null)
@@ -242,7 +255,7 @@ public class RSSReader implements java.io.Closeable {
    * Release all HTTP client resources.
    */
   public void close() {
-    httpclient.getConnectionManager().shutdown();
+	  httpclient.getConnectionManager().shutdown();
   }
 
 }
