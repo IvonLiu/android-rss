@@ -1,7 +1,16 @@
-apply plugin: 'android-library'
+apply plugin: 'com.android.library'
 
 dependencies {
     compile fileTree(dir: 'libs', include: '*.jar')
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:0.12.+'
+    }
 }
 
 android {
