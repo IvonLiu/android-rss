@@ -16,14 +16,8 @@
 
 package org.mcsoxford.rss;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import android.net.Uri;
+import android.util.Log;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -34,10 +28,14 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
 
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
-import android.net.Uri;
-import android.util.Log;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * HTTP client to retrieve and parse RSS 2.0 feeds. Callers must call
@@ -46,6 +44,17 @@ import android.util.Log;
  * @author Mr Horn
  */
 public class RSSReader implements java.io.Closeable {
+
+    private RSSReaderCallbacks mCallbacks;
+
+    public interface RSSReaderCallbacks {
+        public abstract boolean onRequestNetworkState();
+        public abstract File onRequestCacheFile(String uri);
+    }
+
+    public void setCallbacks(RSSReaderCallbacks callbacks) {
+        mCallbacks = callbacks;
+    }
 
   /**
    * Thread-safe {@link HttpClient} implementation.
@@ -60,8 +69,7 @@ public class RSSReader implements java.io.Closeable {
   /**
    * ConnectivityManager to check for network status
    */
-  private final ConnectivityManager mConnectivityManager;
-  
+
   /**
    * Instantiate a thread-safe HTTP client to retrieve RSS feeds. The injected
    * {@link HttpClient} implementation must be thread-safe.
@@ -69,10 +77,9 @@ public class RSSReader implements java.io.Closeable {
    * @param httpclient thread-safe HTTP client implementation
    * @param parser thread-safe RSS parser SPI implementation
    */
-  public RSSReader(HttpClient httpclient, RSSParserSPI parser, ConnectivityManager cm) {
+  public RSSReader(HttpClient httpclient, RSSParserSPI parser) {
     this.httpclient = httpclient;
     this.parser = parser;
-    this.mConnectivityManager = cm;
   }
 
   /**
@@ -83,8 +90,8 @@ public class RSSReader implements java.io.Closeable {
    * @param httpclient thread-safe HTTP client implementation
    * @param config RSS configuration
    */
-  public RSSReader(HttpClient httpclient, RSSConfig config, ConnectivityManager cm) {
-    this(httpclient, new RSSParser(config), cm);
+  public RSSReader(HttpClient httpclient, RSSConfig config) {
+    this(httpclient, new RSSParser(config));
   }
 
   /**
@@ -92,16 +99,16 @@ public class RSSReader implements java.io.Closeable {
    * Internal memory consumption and load performance can be tweaked with
    * {@link RSSConfig}.
    */
-  public RSSReader(RSSConfig config, ConnectivityManager cm) {
-    this(new DefaultHttpClient(), new RSSParser(config), cm);
+  public RSSReader(RSSConfig config) {
+    this(new DefaultHttpClient(), new RSSParser(config));
   }
 
   /**
    * Instantiate a thread-safe HTTP client to retrieve and parse RSS feeds.
    * Default RSS configuration capacity values are used.
    */
-  public RSSReader(ConnectivityManager cm) {
-    this(new DefaultHttpClient(), new RSSParser(new RSSConfig()), cm);
+  public RSSReader() {
+    this(new DefaultHttpClient(), new RSSParser(new RSSConfig()));
   }
 
   
@@ -118,12 +125,14 @@ public class RSSReader implements java.io.Closeable {
    *           HTTP error
    * @throws RSSFault if an unrecoverable IO error has occurred
    */
-  public RSSFeed load(String uri, File cacheFile) throws RSSReaderException {
+  public RSSFeed load(String uri) throws RSSReaderException {
 	
 	  RSSFeed feed = null;
-		 
-	  NetworkInfo activeNetwork = mConnectivityManager.getActiveNetworkInfo();
-	  boolean isConnected = activeNetwork != null && activeNetwork.isConnected();
+
+      boolean isConnected = true;
+      if(mCallbacks != null) {
+          isConnected = mCallbacks.onRequestNetworkState();
+      }
 	
 	  if(isConnected) {
 		  
@@ -169,10 +178,10 @@ public class RSSReader implements java.io.Closeable {
 		    	  InputStream is1 = new ByteArrayInputStream(baos.toByteArray()); 
 		    	  InputStream is2 = new ByteArrayInputStream(baos.toByteArray());
 		    	  feed = parser.parse(is1);
-		    	  saveToCache(cacheFile, is2);
+		    	  saveToCache(getCacheFile(uri), is2);
 		      } else {
 		    	  // Bad input stream, attempt to use cached feed
-		    	  feed = getCachedFeed(cacheFile);
+		    	  feed = getCachedFeed(getCacheFile(uri));
 		      }
 		  } catch (ClientProtocolException e) {
 			  throw new RSSFault(e);
@@ -183,7 +192,7 @@ public class RSSReader implements java.io.Closeable {
 		  }
 	  } else {
 		  // Network connection not usable, attempt to get cached feed
-		  feed = getCachedFeed(cacheFile);
+		  feed = getCachedFeed(getCacheFile(uri));
 	  }
 	  
 	  // Set feed link
@@ -195,7 +204,16 @@ public class RSSReader implements java.io.Closeable {
 	  
 	  return feed;
   }
-  
+
+  private File getCacheFile(String uri) {
+
+      if (mCallbacks == null) {
+          return null;
+      } else {
+          return mCallbacks.onRequestCacheFile(uri);
+      }
+  }
+
   /**
    * Get a RSSFeed from a cached file
    * 

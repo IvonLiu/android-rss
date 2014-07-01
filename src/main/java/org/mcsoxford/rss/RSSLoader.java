@@ -98,8 +98,8 @@ public class RSSLoader {
    * 
    * @see #fifo(int)
    */
-  public static RSSLoader fifo(ConnectivityManager cm) {
-    return new RSSLoader(new LinkedBlockingQueue<RSSFuture>(), cm);
+  public static RSSLoader fifo() {
+    return new RSSLoader(new LinkedBlockingQueue<RSSFuture>());
   }
 
   /**
@@ -108,8 +108,8 @@ public class RSSLoader {
    * @param capacity
    *          expected number of URIs to be loaded at a given time
    */
-  public static RSSLoader fifo(int capacity, ConnectivityManager cm) {
-    return new RSSLoader(new LinkedBlockingQueue<RSSFuture>(capacity), cm);
+  public static RSSLoader fifo(int capacity) {
+    return new RSSLoader(new LinkedBlockingQueue<RSSFuture>(capacity));
   }
 
   /**
@@ -117,8 +117,8 @@ public class RSSLoader {
    * 
    * @see #priority(int)
    */
-  public static RSSLoader priority(ConnectivityManager cm) {
-    return new RSSLoader(new PriorityBlockingQueue<RSSFuture>(), cm);
+  public static RSSLoader priority() {
+    return new RSSLoader(new PriorityBlockingQueue<RSSFuture>());
   }
 
   /**
@@ -127,8 +127,8 @@ public class RSSLoader {
    * @param capacity
    *          expected number of URIs to be loaded at a given time
    */
-  public static RSSLoader priority(int capacity, ConnectivityManager cm) {
-    return new RSSLoader(new PriorityBlockingQueue<RSSFuture>(capacity), cm);
+  public static RSSLoader priority(int capacity) {
+    return new RSSLoader(new PriorityBlockingQueue<RSSFuture>(capacity));
   }
 
   /**
@@ -138,12 +138,12 @@ public class RSSLoader {
    * @see LinkedBlockingQueue
    * @see PriorityBlockingQueue
    */
-  RSSLoader(BlockingQueue<RSSFuture> in, ConnectivityManager cm) {
+  RSSLoader(BlockingQueue<RSSFuture> in) {
     this.in = in;
     this.out = new LinkedBlockingQueue<RSSFuture>();
 
     // start separate thread for loading of RSS feeds
-    new Thread(new Loader(new RSSReader(cm)), DEFAULT_THREAD_NAME).start();
+    new Thread(new Loader(new RSSReader()), DEFAULT_THREAD_NAME).start();
   }
 
   /**
@@ -189,8 +189,8 @@ public class RSSLoader {
    * @return Future representing the RSS feed scheduled for loading,
    *         {@code null} if scheduling failed
    */
-  public Future<RSSFeed> load(String uri, File cacheFile) {
-    return load(uri, cacheFile, RSSFuture.DEFAULT_PRIORITY);
+  public Future<RSSFeed> load(String uri) {
+    return load(uri, RSSFuture.DEFAULT_PRIORITY);
   }
 
   /**
@@ -214,7 +214,7 @@ public class RSSLoader {
    * @return Future representing the RSS feed scheduled for loading,
    *         {@code null} if scheduling failed
    */
-  public Future<RSSFeed> load(String uri, File cacheFile, int priority) {
+  public Future<RSSFeed> load(String uri, int priority) {
     if (uri == null) {
       throw new IllegalArgumentException("RSS feed URI must not be null.");
     }
@@ -225,7 +225,7 @@ public class RSSLoader {
     }
 
     // flag readings happen-after enqueue
-    final RSSFuture future = new RSSFuture(uri, cacheFile, priority);
+    final RSSFuture future = new RSSFuture(uri, priority);
     final boolean ok = in.offer(future);
 
     if (!ok || stopped) {
@@ -306,7 +306,7 @@ public class RSSLoader {
           if (future.status.compareAndSet(RSSFuture.READY, RSSFuture.LOADING)) {
             try {
               // perform loading outside of locked region
-              feed = reader.load(future.uri, future.cacheFile);
+              feed = reader.load(future.uri);
 
               // set successfully loaded RSS feed
               future.set(feed, /* error */null);
@@ -337,7 +337,7 @@ public class RSSLoader {
   /**
    * Internal sentinel to stop the thread that is loading RSS feeds.
    */
-  private final static RSSFuture SENTINEL = new RSSFuture(null, null,/* priority */7);
+  private final static RSSFuture SENTINEL = new RSSFuture(null, /* priority */7);
 
   /**
    * Offer callers control over the asynchronous loading of an RSS feed.
@@ -352,7 +352,6 @@ public class RSSLoader {
 
     /** RSS feed URI */
     final String uri;
-    final File cacheFile;
 
     /** Larger integer gives higher priority */
     final int priority;
@@ -363,9 +362,8 @@ public class RSSLoader {
     RSSFeed feed;
     Exception cause;
 
-    RSSFuture(String uri, File cacheFile, int priority) {
+    RSSFuture(String uri, int priority) {
       this.uri = uri;
-      this.cacheFile = cacheFile;
       this.priority = priority;
       status = new AtomicInteger(READY);
     }
