@@ -15,7 +15,6 @@
  */
 package org.mcsoxford.rss;
 
-import java.io.File;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -24,8 +23,6 @@ import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import android.net.ConnectivityManager;
 
 /**
  * Asynchronous loader for RSS feeds. RSS feeds can be loaded in FIFO order or
@@ -391,7 +388,7 @@ public class RSSLoader {
 
           // guard against spurious wakeups
           while (waiting) {
-            wait();
+              ((Object) this).wait();
           }
         } finally {
           waiting = false;
@@ -418,7 +415,7 @@ public class RSSLoader {
 
           // guard against spurious wakeups
           while (waiting) {
-            wait(timeoutMillis);
+              ((Object) this).wait(timeoutMillis);
 
             // check timeout
             if (System.currentTimeMillis() - startMillis > timeoutMillis) {
@@ -443,7 +440,7 @@ public class RSSLoader {
 
       if (waiting) {
         waiting = false;
-        notifyAll();
+          ((Object) this).notifyAll();
       }
     }
 
