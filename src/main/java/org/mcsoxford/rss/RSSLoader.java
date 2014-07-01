@@ -158,8 +158,8 @@ public class RSSLoader {
    * only RSS feed loads with priority strictly greater than seven (7) are going
    * to be completed.
    * <p>
-   * Subsequent invocations of {@link #load(String)} and
-   * {@link #load(String, int)} return {@code null}.
+   * Subsequent invocations of {@link #load(String, int)} and
+   * {@link #load(String, int, int)} return {@code null}.
    */
   public void stop() {
     // flag writings happen-before enqueue
@@ -186,8 +186,8 @@ public class RSSLoader {
    * @return Future representing the RSS feed scheduled for loading,
    *         {@code null} if scheduling failed
    */
-  public Future<RSSFeed> load(String uri) {
-    return load(uri, RSSFuture.DEFAULT_PRIORITY);
+  public Future<RSSFeed> load(String uri, int loadConfig) {
+    return load(uri, loadConfig, RSSFuture.DEFAULT_PRIORITY);
   }
 
   /**
@@ -211,7 +211,7 @@ public class RSSLoader {
    * @return Future representing the RSS feed scheduled for loading,
    *         {@code null} if scheduling failed
    */
-  public Future<RSSFeed> load(String uri, int priority) {
+  public Future<RSSFeed> load(String uri, int loadConfig, int priority) {
     if (uri == null) {
       throw new IllegalArgumentException("RSS feed URI must not be null.");
     }
@@ -222,7 +222,7 @@ public class RSSLoader {
     }
 
     // flag readings happen-after enqueue
-    final RSSFuture future = new RSSFuture(uri, priority);
+    final RSSFuture future = new RSSFuture(uri, loadConfig, priority);
     final boolean ok = in.offer(future);
 
     if (!ok || stopped) {
@@ -303,7 +303,7 @@ public class RSSLoader {
           if (future.status.compareAndSet(RSSFuture.READY, RSSFuture.LOADING)) {
             try {
               // perform loading outside of locked region
-              feed = reader.load(future.uri);
+              feed = reader.load(future.uri, future.loadConfig);
 
               // set successfully loaded RSS feed
               future.set(feed, /* error */null);
@@ -334,7 +334,7 @@ public class RSSLoader {
   /**
    * Internal sentinel to stop the thread that is loading RSS feeds.
    */
-  private final static RSSFuture SENTINEL = new RSSFuture(null, /* priority */7);
+  private final static RSSFuture SENTINEL = new RSSFuture(null, /* invalid config */-1, /* priority */7);
 
   /**
    * Offer callers control over the asynchronous loading of an RSS feed.
@@ -349,6 +349,7 @@ public class RSSLoader {
 
     /** RSS feed URI */
     final String uri;
+    final int loadConfig;
 
     /** Larger integer gives higher priority */
     final int priority;
@@ -359,8 +360,9 @@ public class RSSLoader {
     RSSFeed feed;
     Exception cause;
 
-    RSSFuture(String uri, int priority) {
+    RSSFuture(String uri, int loadConfig, int priority) {
       this.uri = uri;
+      this.loadConfig = loadConfig;
       this.priority = priority;
       status = new AtomicInteger(READY);
     }

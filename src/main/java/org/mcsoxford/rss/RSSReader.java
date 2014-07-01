@@ -56,224 +56,279 @@ public class RSSReader implements java.io.Closeable {
         mCallbacks = callbacks;
     }
 
-  /**
-   * Thread-safe {@link HttpClient} implementation.
-   */
-  private final HttpClient httpclient;
+    /**
+     * Thread-safe {@link HttpClient} implementation.
+     */
+    private final HttpClient httpclient;
 
-  /**
-   * Thread-safe RSS parser SPI.
-   */
-  private final RSSParserSPI parser;
+    /**
+     * Thread-safe RSS parser SPI.
+     */
+    private final RSSParserSPI parser;
 
-  /**
-   * ConnectivityManager to check for network status
-   */
+    /**
+     * ConnectivityManager to check for network status
+     */
 
-  /**
-   * Instantiate a thread-safe HTTP client to retrieve RSS feeds. The injected
-   * {@link HttpClient} implementation must be thread-safe.
-   * 
-   * @param httpclient thread-safe HTTP client implementation
-   * @param parser thread-safe RSS parser SPI implementation
-   */
-  public RSSReader(HttpClient httpclient, RSSParserSPI parser) {
-    this.httpclient = httpclient;
-    this.parser = parser;
-  }
+    /**
+     * Instantiate a thread-safe HTTP client to retrieve RSS feeds. The injected
+     * {@link HttpClient} implementation must be thread-safe.
+     *
+     * @param httpclient thread-safe HTTP client implementation
+     * @param parser thread-safe RSS parser SPI implementation
+     */
+    public RSSReader(HttpClient httpclient, RSSParserSPI parser) {
+      this.httpclient = httpclient;
+      this.parser = parser;
+    }
 
-  /**
-   * Instantiate a thread-safe HTTP client to retrieve RSS feeds. The injected
-   * {@link HttpClient} implementation must be thread-safe. Internal memory
-   * consumption and load performance can be tweaked with {@link RSSConfig}.
-   * 
-   * @param httpclient thread-safe HTTP client implementation
-   * @param config RSS configuration
-   */
-  public RSSReader(HttpClient httpclient, RSSConfig config) {
-    this(httpclient, new RSSParser(config));
-  }
+    /**
+     * Instantiate a thread-safe HTTP client to retrieve RSS feeds. The injected
+     * {@link HttpClient} implementation must be thread-safe. Internal memory
+     * consumption and load performance can be tweaked with {@link RSSConfig}.
+     *
+     * @param httpclient thread-safe HTTP client implementation
+     * @param config RSS configuration
+     */
+    public RSSReader(HttpClient httpclient, RSSConfig config) {
+      this(httpclient, new RSSParser(config));
+    }
 
-  /**
-   * Instantiate a thread-safe HTTP client to retrieve and parse RSS feeds.
-   * Internal memory consumption and load performance can be tweaked with
-   * {@link RSSConfig}.
-   */
-  public RSSReader(RSSConfig config) {
-    this(new DefaultHttpClient(), new RSSParser(config));
-  }
+    /**
+     * Instantiate a thread-safe HTTP client to retrieve and parse RSS feeds.
+     * Internal memory consumption and load performance can be tweaked with
+     * {@link RSSConfig}.
+     */
+    public RSSReader(RSSConfig config) {
+      this(new DefaultHttpClient(), new RSSParser(config));
+    }
 
-  /**
-   * Instantiate a thread-safe HTTP client to retrieve and parse RSS feeds.
-   * Default RSS configuration capacity values are used.
-   */
-  public RSSReader() {
-    this(new DefaultHttpClient(), new RSSParser(new RSSConfig()));
-  }
+    /**
+     * Instantiate a thread-safe HTTP client to retrieve and parse RSS feeds.
+     * Default RSS configuration capacity values are used.
+     */
+    public RSSReader() {
+      this(new DefaultHttpClient(), new RSSParser(new RSSConfig()));
+    }
 
-  
-  public static final int NETWORK_DISCONNECTED = 0;
-  public static final int NETWORK_CONNECTED = 1;
-  
-  /**
-   * Send HTTP GET request and parse the XML response to construct an in-memory
-   * representation of an RSS 2.0 feed.
-   * 
-   * @param uri RSS 2.0 feed URI
-   * @return in-memory representation of downloaded RSS feed
-   * @throws RSSReaderException if RSS feed could not be retrieved because of
-   *           HTTP error
-   * @throws RSSFault if an unrecoverable IO error has occurred
-   */
-  public RSSFeed load(String uri) throws RSSReaderException {
-	
-	  RSSFeed feed = null;
+    public static final int CONFIG_ONLINE_PRIORITY = 0;
+    public static final int CONFIG_CACHED_PRIORITY = 1;
+    public static final int CONFIG_ONLINE_ONLY = 2;
+    public static final int CONFIG_CACHED_ONLY = 3;
 
-      boolean isConnected = true;
-      if(mCallbacks != null) {
-          isConnected = mCallbacks.onRequestNetworkState();
-      }
-	
-	  if(isConnected) {
-		  
-		  // Connected to network, attempt to get feed from URI
-		  
-		  final HttpGet httpget = new HttpGet(uri);
-	
-		  InputStream feedStream = null;
-		  try {
-		      // Send GET request to URI
-		      Log.i("TAG", "sending get request");
-		      final HttpResponse response = httpclient.execute(httpget);
-		
-		      // Check if server response is valid
-		      Log.i("TAG", "checking if server response is valid");
-		      final StatusLine status = response.getStatusLine();
-		      if (status.getStatusCode() != HttpStatus.SC_OK) {
-		    	  throw new RSSReaderException(status.getStatusCode(),
-		    			  status.getReasonPhrase());
-		      }
-	
-		      // Extract content stream from HTTP response
-		      HttpEntity entity = response.getEntity();
-		      feedStream = entity.getContent();
-	
-		      if(feedStream != null) {
-		    	  
-		    	  // Good input stream, proceed normally
-		    	  
-		          ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		
-		    	  // Fake code simulating the copy
-		    	  // You can generally do better with nio if you need...
-		    	  // And please, unlike me, do something about the Exceptions :D
-		    	  byte[] buffer = new byte[1024];
-		    	  int len;
-		    	  while ((len = feedStream.read(buffer)) > -1 ) {
-		    		  baos.write(buffer, 0, len);
-		    	  }
-		    	  baos.flush();
-		          
-		    	  // Create a copy of input stream for writing to cache
-		    	  InputStream is1 = new ByteArrayInputStream(baos.toByteArray()); 
-		    	  InputStream is2 = new ByteArrayInputStream(baos.toByteArray());
-		    	  feed = parser.parse(is1);
-		    	  saveToCache(getCacheFile(uri), is2);
-		      } else {
-		    	  // Bad input stream, attempt to use cached feed
-		    	  feed = getCachedFeed(getCacheFile(uri));
-		      }
-		  } catch (ClientProtocolException e) {
-			  throw new RSSFault(e);
-		  } catch (IOException e) {
-			  throw new RSSFault(e);
-		  } finally {
-			  Resources.closeQuietly(feedStream);
-		  }
-	  } else {
-		  // Network connection not usable, attempt to get cached feed
-		  feed = getCachedFeed(getCacheFile(uri));
-	  }
-	  
-	  // Set feed link
-      if(feed != null) {
-	      if (feed.getLink() == null) {
-	    	  feed.setLink(Uri.parse(uri));
-	      }
-      }
-	  
-	  return feed;
-  }
+    /**
+     * Send HTTP GET request and parse the XML response to construct an in-memory
+     * representation of an RSS 2.0 feed.
+     *
+     * @param uri RSS 2.0 feed URI
+     * @param loadConfig Determine which source to try first: CONFIG_ONLINE_PRIORITY, CONFIG_CACHED_PRIORITY, CONFIG_ONLINE_ONLY, or CONFIG_CACHED_ONLY
+     * @return in-memory representation of downloaded RSS feed
+     * @throws RSSReaderException if RSS feed could not be retrieved because of
+     *           HTTP error
+     * @throws RSSFault if an unrecoverable IO error has occurred
+     */
+    public RSSFeed load(String uri, int loadConfig) throws RSSReaderException {
 
-  private File getCacheFile(String uri) {
+        RSSFeed feed = null;
 
-      if (mCallbacks == null) {
-          return null;
-      } else {
-          return mCallbacks.onRequestCacheFile(uri);
-      }
-  }
+        boolean isConnected = true;
+        if(mCallbacks != null) {
+            isConnected = mCallbacks.onRequestNetworkState();
+        }
 
-  /**
-   * Get a RSSFeed from a cached file
-   * 
-   * @param cacheFile file to parse feed from
-   * @return RSSFeed parsed from cacheFile
-   */
-  private RSSFeed getCachedFeed(File cacheFile) {
-	  
-	  if(cacheFile == null)
-		  return null;
-	  
-	  RSSFeed feed = null;
-	  
-	  try {
-		  
-		  InputStream is = new FileInputStream(cacheFile);
-		  
-		  if(is != null)
-			  feed = parser.parse(is);
-		  
-	  } catch (FileNotFoundException e) {
-		  e.printStackTrace();
-	  }
-	  
-	  return feed;
-  }
-  
-  /**
-   * Writes an InputStream to a cache File for offline use.
-   * 
-   * @param cacheFile File to write feedStream to
-   * @param feedStream InputStream to write to cache file
-   * @throws IOException if file write fails
-   */
-  private void saveToCache(File cacheFile, InputStream feedStream) throws IOException {
+        // Load based on loadConfig
+        switch(loadConfig) {
 
-	  if(cacheFile == null || feedStream == null)
-		  return;
-	  
-      // FileOutputStream used to write file
-      FileOutputStream fileOutput = new FileOutputStream(cacheFile);
-	  
-	  // Buffer to read data from InputStream
-	  byte[] buffer = new byte[1024];
-	  int bufferLength = 0;
-	  while ( (bufferLength = feedStream.read(buffer)) > 0 ) 
-	  {
-		  fileOutput.write(buffer, 0, bufferLength);	
-	  }
-	
-	  //close the output stream when done
-	  fileOutput.close();
-  }
-  
-  /**
-   * Release all HTTP client resources.
-   */
-  public void close() {
-	  httpclient.getConnectionManager().shutdown();
-  }
+            case CONFIG_ONLINE_PRIORITY:
+
+                // Attempt to load from online first
+                // If fail, attempt to load from cache
+
+                if(isConnected) {
+                    feed = loadOnline(uri);
+                }
+
+                if(feed == null) {
+                    feed = loadCached(uri);
+                }
+
+                break;
+
+            case CONFIG_CACHED_PRIORITY:
+
+                // Attempt to load from cache first
+                // If fail, attempt to load from online
+
+                feed = loadCached(uri);
+
+                if(feed == null && isConnected) {
+                    feed = loadOnline(uri);
+                }
+
+                break;
+
+            case CONFIG_ONLINE_ONLY:
+
+                // Attempt to load from online only
+
+                if(isConnected) {
+                    feed = loadOnline(uri);
+                }
+
+                break;
+
+            case CONFIG_CACHED_ONLY:
+
+                // Attempt to load from cached only
+
+                if(isConnected) {
+                    feed = loadCached(uri);
+                }
+
+                break;
+
+        }
+
+        // Set feed link
+        if(feed != null) {
+            if (feed.getLink() == null) {
+                feed.setLink(Uri.parse(uri));
+            }
+        }
+
+        return feed;
+    }
+
+    private RSSFeed loadOnline(String uri) throws RSSReaderException{
+
+        // Connected to network, attempt to get feed from URI
+
+        final HttpGet httpget = new HttpGet(uri);
+        RSSFeed feed = null;
+
+        InputStream feedStream = null;
+        try {
+            // Send GET request to URI
+            Log.i("TAG", "sending get request");
+            final HttpResponse response = httpclient.execute(httpget);
+
+            // Check if server response is valid
+            Log.i("TAG", "checking if server response is valid");
+            final StatusLine status = response.getStatusLine();
+            if (status.getStatusCode() != HttpStatus.SC_OK) {
+                throw new RSSReaderException(status.getStatusCode(),
+                        status.getReasonPhrase());
+            }
+
+            // Extract content stream from HTTP response
+            HttpEntity entity = response.getEntity();
+            feedStream = entity.getContent();
+
+            if(feedStream != null) {
+
+                // Good input stream, proceed normally
+
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+                // Fake code simulating the copy
+                // You can generally do better with nio if you need...
+                // And please, unlike me, do something about the Exceptions :D
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = feedStream.read(buffer)) > -1 ) {
+                    baos.write(buffer, 0, len);
+                }
+                baos.flush();
+
+                // Create a copy of input stream for writing to cache
+                InputStream is1 = new ByteArrayInputStream(baos.toByteArray());
+                InputStream is2 = new ByteArrayInputStream(baos.toByteArray());
+                feed = parser.parse(is1);
+                saveToCache(getCacheFile(uri), is2);
+            }
+        } catch (ClientProtocolException e) {
+            throw new RSSFault(e);
+        } catch (IOException e) {
+            throw new RSSFault(e);
+        } finally {
+            Resources.closeQuietly(feedStream);
+        }
+
+        return feed;
+    }
+
+
+    /**
+     * Get a cached feed for a uri
+     *
+     * @param uri of RSS feed
+     * @return RSSFeed from cached version of feed from uri
+     */
+    private RSSFeed loadCached(String uri) {
+
+        File cacheFile = getCacheFile(uri);
+
+        if(cacheFile == null)
+            return null;
+
+        RSSFeed feed = null;
+
+        try {
+
+            InputStream is = new FileInputStream(cacheFile);
+
+            if(is != null)
+                feed = parser.parse(is);
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        return feed;
+    }
+
+    private File getCacheFile(String uri) {
+
+        if (mCallbacks == null) {
+            return null;
+        } else {
+            return mCallbacks.onRequestCacheFile(uri);
+        }
+    }
+
+
+
+    /**
+     * Writes an InputStream to a cache File for offline use.
+     *
+     * @param cacheFile File to write feedStream to
+     * @param feedStream InputStream to write to cache file
+     * @throws IOException if file write fails
+     */
+    private void saveToCache(File cacheFile, InputStream feedStream) throws IOException {
+    	  if(cacheFile == null || feedStream == null)
+              return;
+
+        // FileOutputStream used to write file
+        FileOutputStream fileOutput = new FileOutputStream(cacheFile);
+
+        //Buffer to read data from InputStream
+        byte[] buffer = new byte[1024];
+        int bufferLength = 0;
+        while ( (bufferLength = feedStream.read(buffer)) > 0 ) {
+            fileOutput.write(buffer, 0, bufferLength);
+        }
+
+        //close the output stream when done
+        fileOutput.close();
+    }
+
+    /**
+     * Release all HTTP client resources.
+     */
+    public void close() {
+        httpclient.getConnectionManager().shutdown();
+    }
 
 }
 
