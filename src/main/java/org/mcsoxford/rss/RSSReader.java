@@ -36,6 +36,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 
 /**
  * HTTP client to retrieve and parse RSS 2.0 feeds. Callers must call
@@ -45,7 +46,7 @@ import java.io.InputStream;
  */
 public class RSSReader implements java.io.Closeable {
 
-    private RSSReaderCallbacks mCallbacks;
+    private WeakReference<RSSReaderCallbacks> mWeakCallback;
 
     public interface RSSReaderCallbacks {
         public abstract boolean onRequestNetworkState();
@@ -53,7 +54,11 @@ public class RSSReader implements java.io.Closeable {
     }
 
     public void setCallbacks(RSSReaderCallbacks callbacks) {
-        mCallbacks = callbacks;
+        mWeakCallback = new WeakReference<RSSReaderCallbacks>(callbacks);
+    }
+
+    public void setCallbacks(WeakReference<RSSReaderCallbacks> callbacks) {
+        mWeakCallback = callbacks;
     }
 
     /**
@@ -132,8 +137,8 @@ public class RSSReader implements java.io.Closeable {
         RSSFeed feed = null;
 
         boolean isConnected = true;
-        if(mCallbacks != null) {
-            isConnected = mCallbacks.onRequestNetworkState();
+        if(mWeakCallback.get() != null) {
+            isConnected = mWeakCallback.get().onRequestNetworkState();
         }
 
         // Load based on loadConfig
@@ -289,10 +294,10 @@ public class RSSReader implements java.io.Closeable {
 
     private File getCacheFile(String uri) {
 
-        if (mCallbacks == null) {
+        if (mWeakCallback.get() == null) {
             return null;
         } else {
-            return mCallbacks.onRequestCacheFile(uri);
+            return mWeakCallback.get().onRequestCacheFile(uri);
         }
     }
 
