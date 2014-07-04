@@ -57,10 +57,6 @@ public class RSSReader implements java.io.Closeable {
         mWeakCallback = new WeakReference<RSSReaderCallbacks>(callbacks);
     }
 
-    public void setCallbacks(WeakReference<RSSReaderCallbacks> callbacks) {
-        mWeakCallback = callbacks;
-    }
-
     /**
      * Thread-safe {@link HttpClient} implementation.
      */
