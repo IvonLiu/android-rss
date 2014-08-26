@@ -112,10 +112,8 @@ public class RSSReader implements java.io.Closeable {
       this(new DefaultHttpClient(), new RSSParser(new RSSConfig()));
     }
 
-    public static final int CONFIG_ONLINE_PRIORITY = 0;
-    public static final int CONFIG_CACHED_PRIORITY = 1;
-    public static final int CONFIG_ONLINE_ONLY = 2;
-    public static final int CONFIG_CACHED_ONLY = 3;
+    public static final int CONFIG_ONLINE_ONLY = 0;
+    public static final int CONFIG_CACHED_ONLY = 1;
 
     /**
      * Send HTTP GET request and parse the XML response to construct an in-memory
@@ -140,34 +138,6 @@ public class RSSReader implements java.io.Closeable {
         // Load based on loadConfig
         switch(loadConfig) {
 
-            case CONFIG_ONLINE_PRIORITY:
-
-                // Attempt to load from online first
-                // If fail, attempt to load from cache
-
-                if(isConnected) {
-                    feed = loadOnline(uri);
-                }
-
-                if(feed == null) {
-                    feed = loadCached(uri);
-                }
-
-                break;
-
-            case CONFIG_CACHED_PRIORITY:
-
-                // Attempt to load from cache first
-                // If fail, attempt to load from online
-
-                feed = loadCached(uri);
-
-                if(feed == null && isConnected) {
-                    feed = loadOnline(uri);
-                }
-
-                break;
-
             case CONFIG_ONLINE_ONLY:
 
                 // Attempt to load from online only
@@ -181,10 +151,7 @@ public class RSSReader implements java.io.Closeable {
             case CONFIG_CACHED_ONLY:
 
                 // Attempt to load from cached only
-
-                if(isConnected) {
-                    feed = loadCached(uri);
-                }
+                feed = loadCached(uri);
 
                 break;
 
